@@ -3,7 +3,7 @@ use axum::{extract::{State, WebSocketUpgrade, Query}, http::{HeaderMap, StatusCo
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
-use telemesh_protocol::{ApiError, Event, HealthResponse, LoginCompleteRequest, LoginStartRequest, MeResponse, PasswordRequest, SendMessageRequest};
+use telemesh_protocol::{ApiError, DeleteMessagesRequest, EditMessageRequest, Event, ForwardMessagesRequest, HealthResponse, LoginCompleteRequest, LoginStartRequest, MarkReadRequest, MeResponse, PasswordRequest, ReactRequest, SendMessageRequest};
 use crate::AppState;
 use uuid::Uuid;
 use tower_http::{trace::TraceLayer, cors::CorsLayer};
@@ -16,6 +16,12 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/dialogs", get(dialogs))
         .route("/api/v1/messages", get(messages))
         .route("/api/v1/messages/send", post(send_message))
+        .route("/api/v1/messages/edit", post(edit_message))
+        .route("/api/v1/messages/delete", post(delete_messages))
+        .route("/api/v1/messages/forward", post(forward_messages))
+        .route("/api/v1/messages/react", post(react_message))
+        .route("/api/v1/messages/read", post(mark_read))
+        .route("/api/v1/messages/search", get(search_messages))
         .route("/api/v1/auth/start", post(auth_start))
         .route("/api/v1/auth/complete", post(auth_complete))
         .route("/api/v1/auth/password", post(auth_password))
@@ -59,11 +65,57 @@ async fn messages(State(s): State<Arc<AppState>>, h: HeaderMap, Query(q): Query<
 }
 async fn send_message(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Json<SendMessageRequest>) -> Response {
     if !authorized(&h, &s) { return deny(); }
-    match s.telegram.send_message(&r.peer, &r.text).await {
+    match s.telegram.send_message(&r.peer, &r.text, r.reply_to).await {
         Ok(v) => Json(v).into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, Json(ApiError { error: e.to_string() })).into_response(),
     }
 }
+
+async fn edit_message(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Json<EditMessageRequest>) -> Response {
+    if !authorized(&h, &s) { return deny(); }
+    match s.telegram.edit_message(&r.peer, r.message_id, &r.text).await {
+        Ok(()) => Json(serde_json::json!({"ok":true})).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(ApiError { error: e.to_string() })).into_response(),
+    }
+}
+async fn delete_messages(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Json<DeleteMessagesRequest>) -> Response {
+    if !authorized(&h, &s) { return deny(); }
+    match s.telegram.delete_messages(&r.peer, &r.message_ids).await {
+        Ok(count) => Json(serde_json::json!({"deleted":count})).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(ApiError { error: e.to_string() })).into_response(),
+    }
+}
+async fn forward_messages(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Json<ForwardMessagesRequest>) -> Response {
+    if !authorized(&h, &s) { return deny(); }
+    match s.telegram.forward_messages(&r.source, &r.destination, &r.message_ids).await {
+        Ok(messages) => Json(messages).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(ApiError { error: e.to_string() })).into_response(),
+    }
+}
+async fn react_message(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Json<ReactRequest>) -> Response {
+    if !authorized(&h, &s) { return deny(); }
+    match s.telegram.react(&r.peer, r.message_id, r.reaction.as_deref()).await {
+        Ok(()) => Json(serde_json::json!({"ok":true})).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(ApiError { error: e.to_string() })).into_response(),
+    }
+}
+async fn mark_read(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Json<MarkReadRequest>) -> Response {
+    if !authorized(&h, &s) { return deny(); }
+    match s.telegram.mark_read(&r.peer).await {
+        Ok(()) => Json(serde_json::json!({"ok":true})).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(ApiError { error: e.to_string() })).into_response(),
+    }
+}
+#[derive(Deserialize)]
+struct SearchQuery { peer: Option<String>, q: String, limit: Option<usize> }
+async fn search_messages(State(s): State<Arc<AppState>>, h: HeaderMap, Query(q): Query<SearchQuery>) -> Response {
+    if !authorized(&h, &s) { return deny(); }
+    match s.telegram.search(q.peer.as_deref(), &q.q, q.limit.unwrap_or(50)).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(ApiError { error: e.to_string() })).into_response(),
+    }
+}
+
 async fn auth_start(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Json<LoginStartRequest>) -> Response {
     if !authorized(&h, &s) { return deny(); }
     match std::env::var("TELEGRAM_API_HASH") {
