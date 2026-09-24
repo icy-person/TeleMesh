@@ -27,7 +27,6 @@ export default function App(){
      if(e.type==="NewMessage"&&e.data){
        const msg=e.data as Message;
        setDialogs(ds=>ds.map(d=>d.id===msg.peer_id?{...d,last_message:msg,unread_count:d.id===selectedRef.current?.id?0:d.unread_count+1}:d));
-       setSelected(current=>current);
        setMessages(x=>selectedRef.current?.id===msg.peer_id&&!x.some(y=>y.id===msg.id)?[...x,msg]:x);if(selectedRef.current?.id!==msg.peer_id){void sendNotification({title:"TeleMesh",body:msg.text||"New message"}).catch(()=>{})}
      }
    },setConnected);
@@ -66,12 +65,17 @@ export default function App(){
  }catch(e){setError(e instanceof Error?e.message:"History failed")}finally{setLoadingMore(false)}};
 
  const send=async()=>{if(!selected||!draft.trim())return;const text=draft.trim();setDraft("");try{
-   const r=await api.send(selected.username||String(selected.id),text);
-   setMessages(x=>x.some(m=>m.id===r.message_id)?x:[...x,{id:r.message_id,peer_id:r.peer_id,text,outgoing:true,reply_to:reply?.id??null}]);\n   setReply(null);
+   if(editing){await api.edit(selected.username||String(selected.id),editing.id,text);setMessages(x=>x.map(m=>m.id===editing.id?{...m,text,edited:true}:m));setEditing(null);return}
+   const r=await api.send(selected.username||String(selected.id),text,reply?.id);
+   setMessages(x=>x.some(m=>m.id===r.message_id)?x:[...x,{id:r.message_id,peer_id:r.peer_id,text,outgoing:true,reply_to:reply?.id??null}]);
+   setReply(null);
    setDialogs(ds=>ds.map(d=>d.id===r.peer_id?{...d,last_message:{id:r.message_id,peer_id:r.peer_id,text,outgoing:true}}:d));
  }catch(e){setError(e instanceof Error?e.message:"Send failed");setDraft(text)}};
 
- const deleteMessage=async(m:Message)=>{if(!selected)return;try{await api.delete(selected.username||String(selected.id),[m.id]);setMessages(x=>x.filter(v=>v.id!==m.id))}catch(e){setError(e instanceof Error?e.message:"Delete failed")}};\n const react=async(m:Message)=>{if(!selected)return;try{await api.react(selected.username||String(selected.id),m.id,"❤️");setMessages(x=>x.map(v=>v.id===m.id?{...v,reaction_count:(v.reaction_count||0)+1}:v))}catch(e){setError(e instanceof Error?e.message:"Reaction failed")}};\n const runSearch=async()=>{if(!search.trim())return;try{const r=await api.search(search,selected?.username||String(selected?.id||""));setSearchResults(r.messages)}catch(e){setError(e instanceof Error?e.message:"Search failed")}};\n const filtered=dialogs.filter(d=>(d.name+" "+(d.username||"")).toLowerCase().includes(query.toLowerCase()));
+ const deleteMessage=async(m:Message)=>{if(!selected)return;try{await api.delete(selected.username||String(selected.id),[m.id]);setMessages(x=>x.filter(v=>v.id!==m.id))}catch(e){setError(e instanceof Error?e.message:"Delete failed")}};
+ const react=async(m:Message)=>{if(!selected)return;try{await api.react(selected.username||String(selected.id),m.id,"❤️");setMessages(x=>x.map(v=>v.id===m.id?{...v,reaction_count:(v.reaction_count||0)+1}:v))}catch(e){setError(e instanceof Error?e.message:"Reaction failed")}};
+ const runSearch=async()=>{if(!search.trim())return;try{const r=await api.search(search,selected?.username||String(selected?.id||""));setSearchResults(r.messages)}catch(e){setError(e instanceof Error?e.message:"Search failed")}};
+ const filtered=dialogs.filter(d=>(d.name+" "+(d.username||"")).toLowerCase().includes(query.toLowerCase()));
 
  if(settings)return <div className="setup"><div className="setup-card"><div className="brand"><div className="logo">T</div><div><b>TeleMesh</b><span>Linux client</span></div></div><h1>Connect to your TeleMesh server</h1><p className="muted">Telegram credentials stay on the server. This client only needs the server endpoint and client token.</p>{error&&<div className="error">{error}</div>}<label>Server URL<input value={server} onChange={e=>setServer(e.target.value)} placeholder={DEFAULT_SERVER}/></label><label>Client token<input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="TELEMESH_TOKEN"/></label><button className="primary" onClick={connect} disabled={loading}>{loading?"Connecting…":"Connect"}</button>{health&&!health.telegram_authorized&&<div className="login-box"><b>Telegram authorization</b><p className="muted">Enter the phone number for the Telegram account stored by this TeleMesh server.</p>{loginStep==="phone"&&<><input className="login-input" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+989123456789"/><button className="primary secondary" onClick={authorize} disabled={loginBusy||!phone.trim()}>{loginBusy?"Sending code…":"Send Telegram code"}</button></>}{loginStep==="code"&&<><input className="login-input" value={code} onChange={e=>setCode(e.target.value)} placeholder="Login code"/><button className="primary secondary" onClick={completeLogin} disabled={loginBusy||!code.trim()}>{loginBusy?"Verifying…":"Verify code"}</button></>}{loginStep==="password"&&<><input className="login-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="2FA password"/><button className="primary secondary" onClick={completePassword} disabled={loginBusy||!password}>{loginBusy?"Checking…":"Complete login"}</button></>}</div>}</div></div>;
 
