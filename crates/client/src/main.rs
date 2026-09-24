@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
             let v = Client::new()
                 .post(format!("{}/api/v1/messages/send", c.server.trim_end_matches('/')))
                 .header("x-telemesh-token", &c.token)
-                .json(&SendMessageRequest { peer: peer.clone(), text: text.clone() })
+                .json(&SendMessageRequest { peer: peer.clone(), text: text.clone(), reply_to: None })
                 .send().await?.error_for_status()?.json::<telemesh_protocol::SendMessageResponse>().await?;
             println!("{}", serde_json::to_string_pretty(&v)?);
         }
