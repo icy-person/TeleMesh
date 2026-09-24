@@ -9,8 +9,6 @@ use grammers_client::{
 use grammers_mtsender::SenderPool;
 use grammers_session::{
     storages::SqliteSession,
-    types::{PeerRef},
-    Session,
 };
 use tokio::{io::{AsyncSeekExt, AsyncWriteExt}, sync::broadcast, time::sleep};
 use telemesh_protocol::{
@@ -44,9 +42,7 @@ impl TelegramService {
         let grammers_mtsender::SenderPool { runner, updates, .. } = pool;
 
         tokio::spawn(async move {
-            if let Err(e) = runner.run().await {
-                error!("Telegram sender runner stopped: {e}");
-            }
+            runner.run().await;
         });
 
         let (events, _) = broadcast::channel(2048);
@@ -72,14 +68,7 @@ impl TelegramService {
                     catch_up: true,
                     update_queue_limit: Some(4096),
                 },
-            ).await {
-                Ok(stream) => stream,
-                Err(e) => {
-                    error!("Telegram update stream initialization failed: {e}");
-                    let _ = tx.send(Event::Reconnecting);
-                    return;
-                }
-            };
+            );
 
             let mut failures = 0u32;
             loop {
@@ -103,17 +92,15 @@ impl TelegramService {
                                     let _ = tx.send(Event::MessagesDeleted { peer_id: 0, message_ids });
                                 }
                             }
-                            Update::MessageReactions(reaction) => {
-                                let peer_id = match reaction.raw.peer {
-                                    grammers_client::grammers_tl_types::enums::Peer::User(p) => p.user_id as i64,
-                                    grammers_client::grammers_tl_types::enums::Peer::Chat(p) => p.chat_id as i64,
-                                    grammers_client::grammers_tl_types::enums::Peer::Channel(p) => p.channel_id as i64,
-                                    _ => 0,
-                                };
-                                let _ = tx.send(Event::ReactionUpdated {
-                                    peer_id,
-                                    message_id: reaction.raw.msg_id,
-                                });
+                            Update::Raw(raw) => {
+                                if let grammers_client::grammers_tl_types::enums::Update::MessageReactions(reaction) = raw.raw {
+                                    let peer_id = match reaction.peer {
+                                        grammers_client::grammers_tl_types::enums::Peer::User(p) => p.user_id,
+                                        grammers_client::grammers_tl_types::enums::Peer::Chat(p) => -p.chat_id,
+                                        grammers_client::grammers_tl_types::enums::Peer::Channel(p) => -1000000000000_i64 - p.channel_id,
+                                    };
+                                    let _ = tx.send(Event::ReactionUpdated { peer_id, message_id: reaction.msg_id });
+                                }
                             }
                             _ => {}
                         }
@@ -141,7 +128,7 @@ impl TelegramService {
     pub async fn me(&self) -> Result<MeResponse> {
         let u = self.client.get_me().await?;
         Ok(MeResponse {
-            id: u.raw.id().bare_id(),
+            id: u.raw.id(),
             username: u.username().map(str::to_owned),
             first_name: u.first_name().map(str::to_owned),
             last_name: u.last_name().map(str::to_owned),
@@ -207,8 +194,9 @@ impl TelegramService {
         };
 
         self.session
-            .peer_ref(peer_id)
+            .peer(peer_id)
             .await?
+            .map(PeerRef::from)
             .ok_or_else(|| anyhow!("peer reference is not cached"))
     }
 
