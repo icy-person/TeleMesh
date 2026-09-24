@@ -14,6 +14,7 @@ export class TeleMeshApi{
  delete(peer:string,message_ids:number[]){return this.req<{deleted:number}>("/api/v1/messages/delete",{method:"POST",body:JSON.stringify({peer,message_ids})})}
  forward(source:string,destination:string,message_ids:number[]){return this.req<Message[]>("/api/v1/messages/forward",{method:"POST",body:JSON.stringify({source,destination,message_ids})})}
  react(peer:string,message_id:number,reaction?:string){return this.req<{ok:boolean}>("/api/v1/messages/react",{method:"POST",body:JSON.stringify({peer,message_id,reaction:reaction??null})})}
+ downloadMedia(peer:string,messageId:number){return fetch(this.base.replace(/\/$/,"")+"/api/v1/messages/media/download?peer="+encodeURIComponent(peer)+"&message_id="+messageId,{headers:{"x-telemesh-token":this.token}}).then(async r=>{if(!r.ok)throw new Error(await r.text());return r.blob()})}
  markRead(peer:string){return this.req<{ok:boolean}>("/api/v1/messages/read",{method:"POST",body:JSON.stringify({peer})})}
  search(q:string,peer?:string,limit=50){const p=peer?"&peer="+encodeURIComponent(peer):"";return this.req<{messages:Message[]}>(`/api/v1/messages/search?q=${encodeURIComponent(q)}${p}&limit=${limit}`)}
  loginStart(phone:string){return this.req<{status:string;requires_code:boolean}>("/api/v1/auth/start",{method:"POST",body:JSON.stringify({phone})})}
