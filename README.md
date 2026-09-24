@@ -116,7 +116,15 @@ The UI currently provides:
 | GET | `/api/v1/me` | Current Telegram account |
 | GET | `/api/v1/dialogs` | Dialog list |
 | GET | `/api/v1/messages?peer=...&limit=...&offset_id=...` | Message history |
-| POST | `/api/v1/messages/send` | Send a text message |
+| POST | `/api/v1/messages/send` | Send a text/reply message |
+| POST | `/api/v1/messages/media` | Upload and send media |
+| GET | `/api/v1/messages/media/download?peer=...&message_id=...` | Download message media |
+| POST | `/api/v1/messages/edit` | Edit a message |
+| POST | `/api/v1/messages/delete` | Delete messages |
+| POST | `/api/v1/messages/forward` | Forward messages |
+| POST | `/api/v1/messages/react` | Add/remove reaction |
+| POST | `/api/v1/messages/read` | Mark chat read |
+| GET | `/api/v1/messages/search?q=...` | Search messages |
 | POST | `/api/v1/auth/start` | Send Telegram login code |
 | POST | `/api/v1/auth/complete` | Complete login code |
 | POST | `/api/v1/auth/password` | Complete Telegram 2FA |
