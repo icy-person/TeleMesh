@@ -11,7 +11,7 @@ repository = "https://github.com/icy-person/TeleMesh"
 
 [workspace.dependencies]
 anyhow = "1"
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["ws", "multipart"] }
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
 futures-util = "0.3"
