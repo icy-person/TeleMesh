@@ -94,7 +94,7 @@ async fn send_media(State(s): State<Arc<AppState>>, h: HeaderMap, mut multipart:
     }
     if peer.trim().is_empty() || bytes.is_empty() { return (StatusCode::BAD_REQUEST, Json(ApiError{error:"peer and file are required".into()})).into_response(); }
     if bytes.len()>50*1024*1024 { return (StatusCode::PAYLOAD_TOO_LARGE, Json(ApiError{error:"file too large (50 MiB limit)".into()})).into_response(); }
-    let safe_name=name.replace('/','_').replace('\\','_'); let path=std::env::temp_dir().join(format!("telemesh-{}-{}",Uuid::new_v4(),safe_name));
+    let safe_name=name.replace('/',"_").replace('\\',"_"); let path=std::env::temp_dir().join(format!("telemesh-{}-{}",Uuid::new_v4(),safe_name));
     if let Err(e)=tokio::fs::write(&path,&bytes).await { return (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiError{error:e.to_string()})).into_response(); }
     let result=s.telegram.send_file(&peer,&path,&caption).await; let _=tokio::fs::remove_file(&path).await;
     match result { Ok(v)=>Json(v).into_response(), Err(e)=>(StatusCode::BAD_GATEWAY,Json(ApiError{error:e.to_string()})).into_response() }
