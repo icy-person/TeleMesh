@@ -71,7 +71,7 @@ impl TelegramService {
                 id:p.id().value(), name:p.name().unwrap_or_default().to_owned(),
                 username:match p { grammers_client::peer::Peer::User(ref u)=>u.username().map(str::to_owned), grammers_client::peer::Peer::Channel(ref c)=>c.username().map(str::to_owned), _=>None },
                 kind:match p { grammers_client::peer::Peer::User(_)=>"user", grammers_client::peer::Peer::Group(_)=>"group", grammers_client::peer::Peer::Channel(_)=>"channel" }.into(),
-                last_message:d.last_message.as_ref().map(Self::message_dto), unread_count:d.unread_count(),
+                last_message:d.last_message.as_ref().map(Self::message_dto), unread_count:0,
             });
         }
         Ok(out)
