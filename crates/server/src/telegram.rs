@@ -198,11 +198,20 @@ impl TelegramService {
             let mut iter = self.client.iter_dialogs();
             while let Some(d) = iter.next().await? {
                 if d.peer().id().bare_id() == id {
-                    return d
-                        .peer()
-                        .to_ref()
-                        .await?
-                        .ok_or_else(|| anyhow::anyhow!("peer cannot be represented"));
+                    return match d.peer() {
+                        Peer::User(user) => user
+                            .to_ref()
+                            .await?
+                            .ok_or_else(|| anyhow::anyhow!("peer cannot be represented")),
+                        Peer::Group(group) => group
+                            .to_ref()
+                            .await?
+                            .ok_or_else(|| anyhow::anyhow!("peer cannot be represented")),
+                        Peer::Channel(channel) => channel
+                            .to_ref()
+                            .await?
+                            .ok_or_else(|| anyhow::anyhow!("peer cannot be represented")),
+                    };
                 }
             }
             return Err(anyhow::anyhow!("peer is not in the dialog cache"));
