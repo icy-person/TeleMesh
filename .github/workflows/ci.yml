@@ -34,8 +34,10 @@ jobs:
         with:
           node-version: 22
       - name: Install Tauri Linux dependencies
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev librsvg2-bin patchelf libssl-dev
       - run: npm install --include=dev
+      - name: Generate PNG icon
+        run: rsvg-convert src-tauri/icons/icon.svg -o src-tauri/icons/icon.png -w 512 -h 512
       - name: Build AppImage
         run: npm run tauri -- build --bundles appimage
       - name: Upload AppImage
