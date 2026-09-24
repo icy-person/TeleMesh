@@ -8,6 +8,7 @@ export class TeleMeshApi{
  }
  health(){return this.req<Health>("/health")} me(){return this.req<Me>("/api/v1/me")} dialogs(){return this.req<Dialog[]>("/api/v1/dialogs")}
  messages(peer:string,limit=50,offsetId=0){return this.req<{messages:Message[];has_more:boolean}>(`/api/v1/messages?peer=${encodeURIComponent(peer)}&limit=${limit}&offset_id=${offsetId}`)}
+ sendMedia(peer:string,file:File,caption=""){const f=new FormData();f.append("peer",peer);f.append("caption",caption);f.append("file",file);return this.req<{message_id:number;peer_id:number}>("/api/v1/messages/media",{method:"POST",headers:{"x-telemesh-token":this.token},body:f})}
  send(peer:string,text:string,reply_to?:number){return this.req<{message_id:number;peer_id:number}>("/api/v1/messages/send",{method:"POST",body:JSON.stringify({peer,text,reply_to:reply_to??null})})}
  edit(peer:string,message_id:number,text:string){return this.req<{ok:boolean}>("/api/v1/messages/edit",{method:"POST",body:JSON.stringify({peer,message_id,text})})}
  delete(peer:string,message_ids:number[]){return this.req<{deleted:number}>("/api/v1/messages/delete",{method:"POST",body:JSON.stringify({peer,message_ids})})}
