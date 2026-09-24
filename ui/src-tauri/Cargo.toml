@@ -1,0 +1,16 @@
+[package]
+name="telemesh-linux"
+version="0.1.0"
+description="TeleMesh Linux desktop client"
+authors=["icy-person"]
+edition="2021"
+
+[lib]
+name="telemesh_linux_lib"
+crate-type=["lib","cdylib","staticlib"]
+
+[dependencies]
+tauri={version="2"}
+tauri-plugin-opener={version="2"}
+serde={version="1",features=["derive"]}
+serde_json="1"
