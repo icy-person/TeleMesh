@@ -17,6 +17,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/messages", get(messages))
         .route("/api/v1/messages/send", post(send_message))
         .route("/api/v1/messages/media", post(send_media))
+        .route("/api/v1/messages/media/download", get(download_media))
         .route("/api/v1/messages/edit", post(edit_message))
         .route("/api/v1/messages/delete", post(delete_messages))
         .route("/api/v1/messages/forward", post(forward_messages))
@@ -69,6 +70,16 @@ async fn send_message(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Jso
     match s.telegram.send_message(&r.peer, &r.text, r.reply_to).await {
         Ok(v) => Json(v).into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, Json(ApiError { error: e.to_string() })).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct DownloadQuery { peer:String, message_id:i32 }
+async fn download_media(State(s): State<Arc<AppState>>, h: HeaderMap, Query(q): Query<DownloadQuery>) -> Response {
+    if !authorized(&h, &s) { return deny(); }
+    match s.telegram.download_media(&q.peer,q.message_id).await {
+        Ok(bytes)=>(StatusCode::OK,[(axum::http::header::CONTENT_TYPE,"application/octet-stream")],bytes).into_response(),
+        Err(e)=>(StatusCode::BAD_GATEWAY,Json(ApiError{error:e.to_string()})).into_response(),
     }
 }
 
