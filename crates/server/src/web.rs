@@ -4,10 +4,10 @@ use axum::extract::ws::{Message,WebSocket};
 use futures_util::{SinkExt,StreamExt};
 use telemesh_protocol::{ApiError,Event,HealthResponse,LoginCompleteRequest,LoginStartRequest,MeResponse,PasswordRequest,SendMessageRequest};
 use crate::AppState;\nuse serde::Deserialize;\nuse uuid::Uuid;\nuse std::time::{Duration,Instant};
-use tower_http::trace::TraceLayer;
+use tower_http::{trace::TraceLayer, cors::CorsLayer};
 
 pub fn router(state:Arc<AppState>)->Router{
- Router::new().route("/health",get(health)).route("/api/v1/events/ticket",post(ticket)).route("/api/v1/me",get(me)).route("/api/v1/dialogs",get(dialogs)).route("/api/v1/messages/send",post(send_message)).route("/api/v1/auth/start",post(auth_start)).route("/api/v1/auth/complete",post(auth_complete)).route("/api/v1/auth/password",post(auth_password)).route("/api/v1/events",get(events)).with_state(state).layer(TraceLayer::new_for_http())
+ Router::new().route("/health",get(health)).route("/api/v1/events/ticket",post(ticket)).route("/api/v1/me",get(me)).route("/api/v1/dialogs",get(dialogs)).route("/api/v1/messages/send",post(send_message)).route("/api/v1/auth/start",post(auth_start)).route("/api/v1/auth/complete",post(auth_complete)).route("/api/v1/auth/password",post(auth_password)).route("/api/v1/events",get(events)).with_state(state).layer(TraceLayer::new_for_http()).layer(CorsLayer::very_permissive())
 }
 fn authorized(h:&HeaderMap,s:&AppState)->bool{h.get("x-telemesh-token").and_then(|v|v.to_str().ok()).is_some_and(|v|v==s.token)}
 fn deny()->Response{(StatusCode::UNAUTHORIZED,Json(ApiError{error:"unauthorized".into()})).into_response()}
