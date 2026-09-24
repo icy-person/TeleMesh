@@ -1,7 +1,6 @@
 use std::{path::{Path, PathBuf}, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Result};
-use futures_util::StreamExt;
 use grammers_client::{
     types::{InputMessage, InputReactions, LoginToken, Media, Message, PasswordToken, Peer},
     Client, SignInError, Update, UpdatesConfiguration,
@@ -60,7 +59,7 @@ impl TelegramService {
         let tx = service.events.clone();
 
         tokio::spawn(async move {
-            let mut stream = match client.stream_updates(
+            let mut stream = client.stream_updates(
                 updates,
                 UpdatesConfiguration {
                     catch_up: true,
