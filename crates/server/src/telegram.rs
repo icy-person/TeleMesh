@@ -124,7 +124,7 @@ impl TelegramService {
         let peer_ref=self.peer_ref(peer).await?;
         let uploaded=self.client.upload_file(path).await?;
         let name=path.file_name().and_then(|x|x.to_str()).unwrap_or("file");
-        let input=grammers_client::message::InputMessage::new().text(caption).file(uploaded).mime_type(mime_guess::from_path(name).first_or_octet_stream().essence_str());
+        let input=grammers_client::message::InputMessage::new().text(caption).mime_type(mime_guess::from_path(name).first_or_octet_stream().essence_str()).file(uploaded);
         let m=self.client.send_message(peer_ref,input).await?;
         Ok(SendMessageResponse{message_id:m.id(),peer_id:m.peer_id().value()})
     }
