@@ -48,7 +48,7 @@ export default function App(){
      setHealth(h);
      if(!h.telegram_authorized){
        setConnected(false);
-       setSettings(false);
+       setSettings(true);
        return;
      }
      const [m,d]=await Promise.all([api.me(),api.dialogs()]);
@@ -90,6 +90,7 @@ export default function App(){
      if(run===connectionRunRef.current){
        setError(e instanceof Error?e.message:"Connection failed");
        setConnected(false);
+       setSettings(true);
      }
    }finally{
      if(run===connectionRunRef.current)setLoading(false);
