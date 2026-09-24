@@ -70,19 +70,12 @@ impl TelegramService {
                             let _ = tx.send(Event::MessageEdited(Self::message_dto(&message)));
                         }
                         Update::MessageDeleted(deletion) => {
-                            let peer_id = deletion
-                                .raw
-                                .clone()
-                                .into_iter()
-                                .next()
-                                .map(|_| 0_i64)
-                                .unwrap_or(0);
                             let message_ids = match deletion.raw {
                                 grammers_client::grammers_tl_types::enums::Update::DeleteMessages(d) => d.messages,
                                 grammers_client::grammers_tl_types::enums::Update::DeleteChannelMessages(d) => d.messages,
                                 _ => Vec::new(),
                             };
-                            let _ = tx.send(Event::MessagesDeleted { peer_id, message_ids });
+                            let _ = tx.send(Event::MessagesDeleted { peer_id: 0, message_ids });
                         }
                         _ => {}
                     },
