@@ -4,14 +4,17 @@ import {TeleMeshApi} from "./api";
 import type {Dialog,Event,Health,Me,Message} from "./types";
 
 const DEFAULT_SERVER="http://127.0.0.1:8787";
+const DISCOVERY_URL="https://icy-person.github.io/TeleMesh/endpoint.json";
 const initials=(s:string)=>s.trim().split(/\s+/).slice(0,2).map(x=>x[0]).join("").toUpperCase()||"?";
 
 export default function App(){
- const [server,setServer]=useState(localStorage.getItem("tm_server")||DEFAULT_SERVER);
+ const savedServer=localStorage.getItem("tm_server")||"";
+ const [server,setServer]=useState(savedServer);
+ const [serverAuto,setServerAuto]=useState(localStorage.getItem("tm_server_auto")==="1");
  const [token,setToken]=useState(localStorage.getItem("tm_token")||"");
  const [connected,setConnected]=useState(false),[health,setHealth]=useState<Health|null>(null),[me,setMe]=useState<Me|null>(null);
  const [dialogs,setDialogs]=useState<Dialog[]>([]),[selected,setSelected]=useState<Dialog|null>(null),[messages,setMessages]=useState<Message[]>([]);
- const [query,setQuery]=useState(""),[draft,setDraft]=useState(""),[error,setError]=useState(""),[loading,setLoading]=useState(false),[settings,setSettings]=useState(!token);
+ const [query,setQuery]=useState(""),[draft,setDraft]=useState(""),[error,setError]=useState(""),[loading,setLoading]=useState(false),[settings,setSettings]=useState(!token||!savedServer);
  const [historyMore,setHistoryMore]=useState(false),[loadingMore,setLoadingMore]=useState(false),[reply,setReply]=useState<Message|null>(null),[editing,setEditing]=useState<Message|null>(null),[search,setSearch]=useState(""),[searchResults,setSearchResults]=useState<Message[]>([]),[file,setFile]=useState<File|null>(null);
  const [phone,setPhone]=useState(""),[code,setCode]=useState(""),[password,setPassword]=useState(""),[loginStep,setLoginStep]=useState<"phone"|"code"|"password">("phone"),[loginBusy,setLoginBusy]=useState(false);
  const api=useMemo(()=>new TeleMeshApi(server,token),[server,token]); const stop=useRef<(()=>void)|null>(null); const scrollRef=useRef<HTMLDivElement|null>(null); const selectedRef=useRef<Dialog|null>(null); const syncingRef=useRef(false); const connectionRunRef=useRef(0);
@@ -43,6 +46,7 @@ export default function App(){
    try{
      localStorage.setItem("tm_server",server);
      localStorage.setItem("tm_token",token);
+     if(serverAuto)localStorage.setItem("tm_server_auto","1"); else localStorage.removeItem("tm_server_auto");
      const h=await api.health();
      if(run!==connectionRunRef.current)return;
      setHealth(h);
@@ -90,12 +94,19 @@ export default function App(){
      if(run===connectionRunRef.current){
        setError(e instanceof Error?e.message:"Connection failed");
        setConnected(false);
-       setSettings(true);
+       if(serverAuto){
+         localStorage.removeItem("tm_server");
+         localStorage.removeItem("tm_server_auto");
+         setServer("");
+         setSettings(true);
+       } else {
+         setSettings(true);
+       }
      }
    }finally{
      if(run===connectionRunRef.current)setLoading(false);
    }
- },[api,server,token,resync]);
+ },[api,server,serverAuto,token,resync]);
 
  const authorize=async()=>{
    setError("");setLoginBusy(true);try{await api.loginStart(phone.trim());setLoginStep("code")}
@@ -123,14 +134,25 @@ export default function App(){
 
  useEffect(()=>{if(selected)loadHistory(selected);else setMessages([])},[selected?.id]);
  useEffect(()=>{
-   if(!token)return;
+   if(server)return;
+   let cancelled=false;
+   setLoading(true);
+   fetch(DISCOVERY_URL+"?t="+Date.now(),{cache:"no-store"})
+     .then(async r=>{if(!r.ok)throw new Error("Discovery HTTP "+r.status);const x=await r.json() as {base_url?:string};if(!x.base_url)throw new Error("Discovery response has no server URL");return x.base_url;})
+     .then(url=>{if(cancelled)return;const normalized=url.replace(/\\/$/,"");setServer(normalized);setServerAuto(true);localStorage.setItem("tm_server",normalized);localStorage.setItem("tm_server_auto","1");setSettings(!token);setError("");})
+     .catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:"Server discovery failed");})
+     .finally(()=>{if(!cancelled)setLoading(false);});
+   return ()=>{cancelled=true};
+ },[server,token]);
+ useEffect(()=>{
+   if(!token||!server)return;
    void connect();
    return ()=>{
      ++connectionRunRef.current;
      stop.current?.();
      stop.current=null;
    };
- },[token,connect]);
+ },[token,server,connect]);
 
  const loadOlder=async()=>{if(!selected||!historyMore||loadingMore||messages.length===0)return;setLoadingMore(true);try{
    const r=await api.messages(selected.username||String(selected.id),50,messages[0].id);
@@ -150,7 +172,7 @@ export default function App(){
  const runSearch=async()=>{if(!search.trim())return;try{const r=await api.search(search,selected?.username||String(selected?.id||""));setSearchResults(r.messages)}catch(e){setError(e instanceof Error?e.message:"Search failed")}};
  const filtered=dialogs.filter(d=>(d.name+" "+(d.username||"")).toLowerCase().includes(query.toLowerCase()));
 
- if(settings)return <div className="setup"><div className="setup-card"><div className="brand"><div className="logo">T</div><div><b>TeleMesh</b><span>Linux client</span></div></div><h1>Connect to your TeleMesh server</h1><p className="muted">Telegram credentials stay on the server. This client only needs the server endpoint and client token.</p>{error&&<div className="error">{error}</div>}<label>Server URL<input value={server} onChange={e=>setServer(e.target.value)} placeholder={DEFAULT_SERVER}/></label><label>Client token<input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="TELEMESH_TOKEN"/></label><button className="primary" onClick={connect} disabled={loading}>{loading?"Connecting…":"Connect"}</button>{health&&!health.telegram_authorized&&<div className="login-box"><b>Telegram authorization</b><p className="muted">Enter the phone number for the Telegram account stored by this TeleMesh server.</p>{loginStep==="phone"&&<><input className="login-input" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+989123456789"/><button className="primary secondary" onClick={authorize} disabled={loginBusy||!phone.trim()}>{loginBusy?"Sending code…":"Send Telegram code"}</button></>}{loginStep==="code"&&<><input className="login-input" value={code} onChange={e=>setCode(e.target.value)} placeholder="Login code"/><button className="primary secondary" onClick={completeLogin} disabled={loginBusy||!code.trim()}>{loginBusy?"Verifying…":"Verify code"}</button></>}{loginStep==="password"&&<><input className="login-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="2FA password"/><button className="primary secondary" onClick={completePassword} disabled={loginBusy||!password}>{loginBusy?"Checking…":"Complete login"}</button></>}</div>}</div></div>;
+ if(settings)return <div className="setup"><div className="setup-card"><div className="brand"><div className="logo">T</div><div><b>TeleMesh</b><span>Linux client</span></div></div><h1>Connect to your TeleMesh server</h1><p className="muted">Telegram credentials stay on the server. This client only needs the server endpoint and client token.</p>{error&&<div className="error">{error}</div>}<label>Server URL<input value={server} onChange={e=>{setServer(e.target.value);setServerAuto(false);localStorage.removeItem("tm_server_auto")}} placeholder={DEFAULT_SERVER}/></label><label>Client token<input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="TELEMESH_TOKEN"/></label><button className="primary" onClick={connect} disabled={loading}>{loading?"Connecting…":"Connect"}</button>{health&&!health.telegram_authorized&&<div className="login-box"><b>Telegram authorization</b><p className="muted">Enter the phone number for the Telegram account stored by this TeleMesh server.</p>{loginStep==="phone"&&<><input className="login-input" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+989123456789"/><button className="primary secondary" onClick={authorize} disabled={loginBusy||!phone.trim()}>{loginBusy?"Sending code…":"Send Telegram code"}</button></>}{loginStep==="code"&&<><input className="login-input" value={code} onChange={e=>setCode(e.target.value)} placeholder="Login code"/><button className="primary secondary" onClick={completeLogin} disabled={loginBusy||!code.trim()}>{loginBusy?"Verifying…":"Verify code"}</button></>}{loginStep==="password"&&<><input className="login-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="2FA password"/><button className="primary secondary" onClick={completePassword} disabled={loginBusy||!password}>{loginBusy?"Checking…":"Complete login"}</button></>}</div>}</div></div>;
 
  return <div className="app">
   <aside className="sidebar">
