@@ -1,7 +1,7 @@
 mod telegram;
 mod web;
 
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, env, net::SocketAddr, sync::Arc, time::{Duration, Instant}};
 use anyhow::{Context, Result};
 use tokio::sync::{broadcast, Mutex};
 use tracing::info;
@@ -11,7 +11,7 @@ pub struct AppState {
     pub telegram: telegram::TelegramService,
     pub token: String,
     pub events: broadcast::Sender<Event>,
-    pub login: Mutex<Option<telegram::LoginState>>,
+    pub login: Mutex<Option<telegram::LoginState>>,\n    pub ws_tickets: Mutex<HashMap<String, Instant>>,
 }
 
 #[tokio::main]
@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     if let Some(parent) = std::path::Path::new(&session).parent() { tokio::fs::create_dir_all(parent).await?; }
     let telegram = telegram::TelegramService::connect(api_id, api_hash, &session).await?;
     let (events, _) = broadcast::channel(512);
-    let state = Arc::new(AppState { telegram, token, events, login: Mutex::new(None) });
+    let state = Arc::new(AppState { telegram, token, events, login: Mutex::new(None), ws_tickets: Mutex::new(HashMap::new()) });
     let listener = tokio::net::TcpListener::bind(bind).await?;
     info!("TeleMesh server listening on {bind}");
     axum::serve(listener, web::router(state)).await?;
