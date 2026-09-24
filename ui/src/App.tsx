@@ -13,14 +13,15 @@ export default function App(){
  const [query,setQuery]=useState(""),[draft,setDraft]=useState(""),[error,setError]=useState(""),[loading,setLoading]=useState(false),[settings,setSettings]=useState(!token);
  const [historyMore,setHistoryMore]=useState(false),[loadingMore,setLoadingMore]=useState(false);
  const [phone,setPhone]=useState(""),[code,setCode]=useState(""),[password,setPassword]=useState(""),[loginStep,setLoginStep]=useState<"phone"|"code"|"password">("phone"),[loginBusy,setLoginBusy]=useState(false);
- const api=useMemo(()=>new TeleMeshApi(server,token),[server,token]); const stop=useRef<(()=>void)|null>(null); const scrollRef=useRef<HTMLDivElement|null>(null);
+ const api=useMemo(()=>new TeleMeshApi(server,token),[server,token]); const stop=useRef<(()=>void)|null>(null); const scrollRef=useRef<HTMLDivElement|null>(null); const selectedRef=useRef<Dialog|null>(null);
 
+ const chooseDialog=(d:Dialog|null)=>{selectedRef.current=d;setSelected(d)};
  const connect=async()=>{setError("");setLoading(true);try{
    localStorage.setItem("tm_server",server);localStorage.setItem("tm_token",token);
    const h=await api.health(); setHealth(h);
    if(!h.telegram_authorized){setConnected(false);setSettings(false);return}
    const [m,d]=await Promise.all([api.me(),api.dialogs()]);
-   setMe(m);setDialogs(d);setSelected(d[0]||null);setSettings(false);
+   setMe(m);setDialogs(d);chooseDialog(d[0]||null);setSettings(false);
    stop.current?.(); stop.current=await api.events((e:Event)=>{
      if(e.type==="NewMessage"&&e.data){
        const msg=e.data as Message;
@@ -79,7 +80,7 @@ export default function App(){
    <div className="me">{me&&<><div className="avatar">{initials(me.first_name||me.username||"U")}</div><div><b>{[me.first_name,me.last_name].filter(Boolean).join(" ")||me.username||"Telegram"}</b><small>@{me.username||"account"}</small></div>}<i className={connected?"online":""}/></div>}
    <div className="search"><span>⌕</span><input placeholder="Search chats" value={query} onChange={e=>setQuery(e.target.value)}/></div>
    <div className="section-title">Chats <span>{filtered.length}</span></div>
-   <div className="dialogs">{filtered.map(d=><button className={"dialog "+(selected?.id===d.id?"active":"")} key={d.id} onClick={()=>setSelected(d)}><div className="avatar small">{initials(d.name)}</div><div className="dialog-body"><div><b>{d.name}</b><time>{d.last_message?.date?new Date(d.last_message.date).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):""}</time></div><p>{d.last_message?.text||d.username||d.kind}</p></div></button>)}</div>
+   <div className="dialogs">{filtered.map(d=><button className={"dialog "+(selected?.id===d.id?"active":"")} key={d.id} onClick={()=>chooseDialog(d)}><div className="avatar small">{initials(d.name)}</div><div className="dialog-body"><div><b>{d.name}</b><time>{d.last_message?.date?new Date(d.last_message.date).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):""}</time></div><p>{d.last_message?.text||d.username||d.kind}</p></div></button>)}</div>
   </aside>
   <main className="chat">
    {selected?<><header className="chat-head"><div className="avatar">{initials(selected.name)}</div><div><h2>{selected.name}</h2><span>{selected.username?"@"+selected.username:selected.kind}</span></div><div className="head-actions"><button className="icon">⌕</button><button className="icon">⋮</button></div></header>
