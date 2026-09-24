@@ -17,7 +17,7 @@ export default function App(){
  const api=useMemo(()=>new TeleMeshApi(server,token),[server,token]); const stop=useRef<(()=>void)|null>(null); const scrollRef=useRef<HTMLDivElement|null>(null); const selectedRef=useRef<Dialog|null>(null); const syncingRef=useRef(false); const connectionRunRef=useRef(0);
 
  const chooseDialog=(d:Dialog|null)=>{selectedRef.current=d;setSelected(d)};
- const resync=async(d:Dialog|null=selectedRef.current)=>{
+ const resync=useCallback(async(d:Dialog|null=selectedRef.current)=>{
    if(syncingRef.current)return;
    syncingRef.current=true;
    try{
@@ -91,7 +91,7 @@ export default function App(){
    }finally{
      if(run===connectionRunRef.current)setLoading(false);
    }
- },[api,server,token,resync]);tConnected(false)}finally{setLoading(false)}};
+ },[api,server,token,resync]);
 
  const authorize=async()=>{
    setError("");setLoginBusy(true);try{await api.loginStart(phone.trim());setLoginStep("code")}
