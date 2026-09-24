@@ -12,6 +12,7 @@ export default function App(){
  const [dialogs,setDialogs]=useState<Dialog[]>([]),[selected,setSelected]=useState<Dialog|null>(null),[messages,setMessages]=useState<Message[]>([]);
  const [query,setQuery]=useState(""),[draft,setDraft]=useState(""),[error,setError]=useState(""),[loading,setLoading]=useState(false),[settings,setSettings]=useState(!token);
  const [historyMore,setHistoryMore]=useState(false),[loadingMore,setLoadingMore]=useState(false);
+ const [phone,setPhone]=useState(""),[code,setCode]=useState(""),[password,setPassword]=useState(""),[loginStep,setLoginStep]=useState<"phone"|"code"|"password">("phone"),[loginBusy,setLoginBusy]=useState(false);
  const api=useMemo(()=>new TeleMeshApi(server,token),[server,token]); const stop=useRef<(()=>void)|null>(null); const scrollRef=useRef<HTMLDivElement|null>(null);
 
  const connect=async()=>{setError("");setLoading(true);try{
@@ -23,11 +24,31 @@ export default function App(){
    stop.current?.(); stop.current=await api.events((e:Event)=>{
      if(e.type==="NewMessage"&&e.data){
        const msg=e.data as Message;
-       setMessages(x=>x.some(y=>y.id===msg.id&&y.peer_id===msg.peer_id)?x:[...x,msg]);
        setDialogs(ds=>ds.map(d=>d.id===msg.peer_id?{...d,last_message:msg}:d));
+       setSelected(current=>current);
+       setMessages(x=>selected&&msg.peer_id===selected.id&&!x.some(y=>y.id===msg.id&&y.peer_id===msg.peer_id)?[...x,msg]:x);
      }
    },setConnected);
  }catch(e){setError(e instanceof Error?e.message:"Connection failed");setConnected(false)}finally{setLoading(false)}};
+
+ const authorize=async()=>{
+   setError("");setLoginBusy(true);try{await api.loginStart(phone.trim());setLoginStep("code")}
+   catch(e){setError(e instanceof Error?e.message:"Login failed")}finally{setLoginBusy(false)}
+ };
+ const completeLogin=async()=>{
+   setError("");setLoginBusy(true);try{
+     try{await api.loginComplete(code.trim());setLoginStep("phone");setCode("");await connect()}
+     catch(e){
+       const msg=e instanceof Error?e.message:"Login failed";
+       if(msg.toLowerCase().includes("2fa")||msg.toLowerCase().includes("password"))setLoginStep("password");
+       else throw e;
+     }
+   }catch(e){setError(e instanceof Error?e.message:"Login failed")}finally{setLoginBusy(false)}
+ };
+ const completePassword=async()=>{
+   setError("");setLoginBusy(true);try{await api.loginPassword(password);setPassword("");setLoginStep("phone");await connect()}
+   catch(e){setError(e instanceof Error?e.message:"2FA failed")}finally{setLoginBusy(false)}
+ };
 
  const loadHistory=async(d:Dialog)=>{setLoadingMore(false);setLoading(true);try{
    const peer=d.username||String(d.id); const r=await api.messages(peer,50,0); setMessages(r.messages);setHistoryMore(r.has_more);
@@ -45,11 +66,12 @@ export default function App(){
  const send=async()=>{if(!selected||!draft.trim())return;const text=draft.trim();setDraft("");try{
    const r=await api.send(selected.username||String(selected.id),text);
    setMessages(x=>x.some(m=>m.id===r.message_id)?x:[...x,{id:r.message_id,peer_id:r.peer_id,text,outgoing:true}]);
+   setDialogs(ds=>ds.map(d=>d.id===r.peer_id?{...d,last_message:{id:r.message_id,peer_id:r.peer_id,text,outgoing:true}}:d));
  }catch(e){setError(e instanceof Error?e.message:"Send failed");setDraft(text)}};
 
  const filtered=dialogs.filter(d=>(d.name+" "+(d.username||"")).toLowerCase().includes(query.toLowerCase()));
 
- if(settings)return <div className="setup"><div className="setup-card"><div className="brand"><div className="logo">T</div><div><b>TeleMesh</b><span>Linux client</span></div></div><h1>Connect to your TeleMesh server</h1><p className="muted">Telegram credentials stay on the server. This client only needs the server endpoint and client token.</p>{error&&<div className="error">{error}</div>}<label>Server URL<input value={server} onChange={e=>setServer(e.target.value)} placeholder={DEFAULT_SERVER}/></label><label>Client token<input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="TELEMESH_TOKEN"/></label><button className="primary" onClick={connect} disabled={loading}>{loading?"Connecting…":"Connect"}</button>{health&&!health.telegram_authorized&&<div className="login-box"><b>Telegram is not authorized on the server.</b><p className="muted">Authorize the Telegram account from the server API, then reconnect.</p></div>}</div></div>;
+ if(settings)return <div className="setup"><div className="setup-card"><div className="brand"><div className="logo">T</div><div><b>TeleMesh</b><span>Linux client</span></div></div><h1>Connect to your TeleMesh server</h1><p className="muted">Telegram credentials stay on the server. This client only needs the server endpoint and client token.</p>{error&&<div className="error">{error}</div>}<label>Server URL<input value={server} onChange={e=>setServer(e.target.value)} placeholder={DEFAULT_SERVER}/></label><label>Client token<input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="TELEMESH_TOKEN"/></label><button className="primary" onClick={connect} disabled={loading}>{loading?"Connecting…":"Connect"}</button>{health&&!health.telegram_authorized&&<div className="login-box"><b>Telegram authorization</b><p className="muted">Enter the phone number for the Telegram account stored by this TeleMesh server.</p>{loginStep==="phone"&&<><input className="login-input" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+989123456789"/><button className="primary secondary" onClick={authorize} disabled={loginBusy||!phone.trim()}>{loginBusy?"Sending code…":"Send Telegram code"}</button></>}{loginStep==="code"&&<><input className="login-input" value={code} onChange={e=>setCode(e.target.value)} placeholder="Login code"/><button className="primary secondary" onClick={completeLogin} disabled={loginBusy||!code.trim()}>{loginBusy?"Verifying…":"Verify code"}</button></>}{loginStep==="password"&&<><input className="login-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="2FA password"/><button className="primary secondary" onClick={completePassword} disabled={loginBusy||!password}>{loginBusy?"Checking…":"Complete login"}</button></>}</div>}</div></div>;
 
  return <div className="app">
   <aside className="sidebar">
