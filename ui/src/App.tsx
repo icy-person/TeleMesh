@@ -31,7 +31,7 @@ export default function App(){
        await api.markRead(current.username||String(current.id));
        setDialogs(ds=>ds.map(x=>x.id===current.id?{...x,unread_count:0}:x));
      }
-   }catch(e){setError(e instanceof Error?e.message:"State resync failed const connect=useCallback(async()=>{
+   }catch(e){setError(e instanceof Error?e.message:"State resync failed")}finally{syncingRef.current=false}};\n\n const connect=useCallback(async()=>{
    const run=++connectionRunRef.current;
    stop.current?.();
    stop.current=null;
