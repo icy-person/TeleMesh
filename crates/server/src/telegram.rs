@@ -120,6 +120,15 @@ impl TelegramService {
         }
         Ok(SearchResponse{messages:out})
     }
+    pub async fn send_file(&self, peer:&str, path:&std::path::Path, caption:&str)->Result<SendMessageResponse>{
+        let peer_ref=self.peer_ref(peer).await?;
+        let uploaded=self.client.upload_file(path).await?;
+        let name=path.file_name().and_then(|x|x.to_str()).unwrap_or("file");
+        let input=grammers_client::message::InputMessage::new().text(caption).file(uploaded).mime_type(mime_guess::from_path(name).first_or_octet_stream().essence_str());
+        let m=self.client.send_message(peer_ref,input).await?;
+        Ok(SendMessageResponse{message_id:m.id(),peer_id:m.peer_id().value()})
+    }
+
     pub async fn login_start(&self,phone:&str,api_hash:&str)->Result<grammers_client::client::LoginToken>{ Ok(self.client.request_login_code(phone,api_hash).await?) }
     pub async fn login_code(&self,t:&grammers_client::client::LoginToken,code:&str)->std::result::Result<grammers_client::peer::User,SignInError>{ self.client.sign_in(t,code).await }
     pub async fn login_password(&self,t:grammers_client::client::PasswordToken,password:&str)->std::result::Result<grammers_client::peer::User,SignInError>{ self.client.check_password(t,password).await }
