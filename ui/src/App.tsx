@@ -139,7 +139,7 @@ export default function App(){
    setLoading(true);
    fetch(DISCOVERY_URL+"?t="+Date.now(),{cache:"no-store"})
      .then(async r=>{if(!r.ok)throw new Error("Discovery HTTP "+r.status);const x=await r.json() as {base_url?:string};if(!x.base_url)throw new Error("Discovery response has no server URL");return x.base_url;})
-     .then(url=>{if(cancelled)return;const normalized=url.replace(/\\/$/,"");setServer(normalized);setServerAuto(true);localStorage.setItem("tm_server",normalized);localStorage.setItem("tm_server_auto","1");setSettings(!token);setError("");})
+     .then(url=>{if(cancelled)return;const normalized=url.replace(/\/$/,"");setServer(normalized);setServerAuto(true);localStorage.setItem("tm_server",normalized);localStorage.setItem("tm_server_auto","1");setSettings(!token);setError("");})
      .catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:"Server discovery failed");})
      .finally(()=>{if(!cancelled)setLoading(false);});
    return ()=>{cancelled=true};
