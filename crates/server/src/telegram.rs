@@ -4,7 +4,7 @@ use futures_util::StreamExt;
 use grammers_client::{Client, SignInError};
 use grammers_mtsender::SenderPool;
 use grammers_session::storages::SqliteSession;
-use telemesh_protocol::{DialogDto, Event, MeResponse, MessageDto, MessagesResponse, SendMessageResponse};
+use telemesh_protocol::{DialogDto, Event, MeResponse, MessageDto, MessagesResponse, SearchResponse, SendMessageResponse};
 use tokio::sync::broadcast;
 use tracing::{error, info};
 
@@ -69,6 +69,10 @@ impl TelegramService {
             text: m.text().to_owned(),
             outgoing: m.outgoing(),
             date: Some(m.date()),
+            reply_to: m.reply_to_message_id(),
+            edited: m.edit_date().is_some(),
+            reaction_count: m.reaction_count(),
+            media: None,
         }
     }
 
@@ -122,9 +126,10 @@ impl TelegramService {
         Ok(MessagesResponse { has_more: messages.len() == take, messages })
     }
 
-    pub async fn send_message(&self, peer: &str, text: &str) -> Result<SendMessageResponse> {
+    pub async fn send_message(&self, peer: &str, text: &str, reply_to: Option<i32>) -> Result<SendMessageResponse> {
         let peer_ref = self.peer_ref(peer).await?;
-        let m = self.client.send_message(peer_ref, text).await?;
+        let input = grammers_client::message::InputMessage::new().text(text).reply_to(reply_to);
+        let m = self.client.send_message(peer_ref, input).await?;
         Ok(SendMessageResponse { message_id: m.id(), peer_id: m.peer_id().value() })
     }
 
@@ -138,5 +143,62 @@ impl TelegramService {
     pub async fn login_password(&self, t: grammers_client::client::PasswordToken, password: &str)
         -> std::result::Result<grammers_client::peer::User, SignInError> {
         self.client.check_password(t, password).await
+    }
+}
+
+    pub async fn edit_message(&self, peer: &str, message_id: i32, text: &str) -> Result<()> {
+        let peer_ref = self.peer_ref(peer).await?;
+        self.client.edit_message(peer_ref, message_id, text).await?;
+        Ok(())
+    }
+
+    pub async fn delete_messages(&self, peer: &str, ids: &[i32]) -> Result<usize> {
+        let peer_ref = self.peer_ref(peer).await?;
+        Ok(self.client.delete_messages(peer_ref, ids).await?)
+    }
+
+    pub async fn forward_messages(&self, source: &str, destination: &str, ids: &[i32]) -> Result<Vec<MessageDto>> {
+        let src = self.peer_ref(source).await?;
+        let dst = self.peer_ref(destination).await?;
+        let result = self.client.forward_messages(dst, ids, src).await?;
+        Ok(result.into_iter().flatten().map(|m| Self::message_dto(&m)).collect())
+    }
+
+    pub async fn react(&self, peer: &str, message_id: i32, reaction: Option<&str>) -> Result<()> {
+        let peer_ref = self.peer_ref(peer).await?;
+        match reaction {
+            Some(r) if !r.trim().is_empty() => self.client.send_reactions(peer_ref, message_id, r).await?,
+            _ => self.client.send_reactions(peer_ref, message_id, grammers_client::message::InputReactions::remove()).await?,
+        }
+        Ok(())
+    }
+
+    pub async fn mark_read(&self, peer: &str) -> Result<()> {
+        let peer_ref = self.peer_ref(peer).await?;
+        self.client.mark_as_read(peer_ref).await?;
+        Ok(())
+    }
+
+    pub async fn search(&self, peer: Option<&str>, query: &str, limit: usize) -> Result<SearchResponse> {
+        let take = limit.clamp(1, 100);
+        let mut out = Vec::new();
+        match peer {
+            Some(p) => {
+                let peer_ref = self.peer_ref(p).await?;
+                let mut iter = self.client.search_messages(peer_ref).query(query).limit(take);
+                while out.len() < take {
+                    let Some(m) = iter.next().await? else { break };
+                    out.push(Self::message_dto(&m));
+                }
+            }
+            None => {
+                let mut iter = self.client.search_all_messages().query(query);
+                while out.len() < take {
+                    let Some(m) = iter.next().await? else { break };
+                    out.push(Self::message_dto(&m));
+                }
+            }
+        }
+        Ok(SearchResponse { messages: out })
     }
 }
