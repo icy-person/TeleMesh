@@ -11,7 +11,8 @@ pub struct AppState {
     pub telegram: telegram::TelegramService,
     pub token: String,
     pub events: broadcast::Sender<Event>,
-    pub login: Mutex<Option<telegram::LoginState>>,\n    pub ws_tickets: Mutex<HashMap<String, Instant>>,
+    pub login: Mutex<Option<telegram::LoginState>>,
+    pub ws_tickets: Mutex<HashMap<String, Instant>>,
 }
 
 #[tokio::main]
