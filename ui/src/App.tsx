@@ -82,7 +82,7 @@ export default function App(){
  return <div className="app">
   <aside className="sidebar">
    <div className="side-head"><div className="brand"><div className="logo">T</div><div><b>TeleMesh</b><span>{connected?"Connected":"Offline"}</span></div></div><button className="icon" onClick={()=>setSettings(true)} title="Settings">⚙</button></div>
-   <div className="me">{me&&<><div className="avatar">{initials(me.first_name||me.username||"U")}</div><div><b>{[me.first_name,me.last_name].filter(Boolean).join(" ")||me.username||"Telegram"}</b><small>@{me.username||"account"}</small></div>}<i className={connected?"online":""}/></div></>)}
+   <div className="me">{me&&<><div className="avatar">{initials(me.first_name||me.username||"U")}</div><div><b>{[me.first_name,me.last_name].filter(Boolean).join(" ")||me.username||"Telegram"}</b><small>@{me.username||"account"}</small></div>}<i className={connected?"online":""}/></>}</div>
    <div className="search"><span>⌕</span><input placeholder="Search chats" value={query} onChange={e=>setQuery(e.target.value)}/></div>
    <div className="section-title">Chats <span>{filtered.length}</span></div>
    <div className="dialogs">{filtered.map(d=><button className={"dialog "+(selected?.id===d.id?"active":"")} key={d.id} onClick={()=>chooseDialog(d)}><div className="avatar small">{initials(d.name)}</div><div className="dialog-body"><div><b>{d.name}</b><time>{d.last_message?.date?new Date(d.last_message.date).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):""}</time></div><p>{d.last_message?.text||d.username||d.kind}{d.unread_count>0&&<strong>{d.unread_count}</strong>}</p></div></button>)}</div>
