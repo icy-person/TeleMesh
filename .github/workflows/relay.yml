@@ -1,0 +1,148 @@
+name: TeleMesh relay server
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */5 * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: telemesh-relay
+  cancel-in-progress: true
+
+jobs:
+  relay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    environment:
+      name: github-pages
+    env:
+      TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+      TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+      TELEMESH_TOKEN: ${{ secrets.TELEMESH_TOKEN }}
+      TELEMESH_BIND: 127.0.0.1:8787
+      TELEMESH_SESSION: data/telemesh.session
+      RUST_LOG: telemesh=info,tower_http=info
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate server secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${TELEGRAM_API_ID}" || { echo "::error::Missing TELEGRAM_API_ID repository secret"; exit 1; }
+          test -n "${TELEGRAM_API_HASH}" || { echo "::error::Missing TELEGRAM_API_HASH repository secret"; exit 1; }
+          test -n "${TELEMESH_TOKEN}" || { echo "::error::Missing TELEMESH_TOKEN repository secret"; exit 1; }
+
+      - name: Build TeleMesh server
+        run: cargo build -p telemesh-server --release
+
+      - name: Start TeleMesh server
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          nohup ./target/release/telemesh-server > telemesh-server.log 2>&1 &
+          echo $! > telemesh-server.pid
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8787/health > health.json; then
+              cat health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::TeleMesh server did not start"
+          cat telemesh-server.log || true
+          exit 1
+
+      - name: Install cloudflared
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 5 --retry-all-errors             https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb             -o /tmp/cloudflared.deb
+          sudo dpkg -i /tmp/cloudflared.deb
+
+      - name: Start Cloudflare Quick Tunnel
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8787             > cloudflared.log 2>&1 &
+          echo $! > cloudflared.pid
+
+          for i in {1..90}; do
+            TUNNEL_URL=$(grep -Eo 'https://[a-zA-Z0-9.-]+\\.trycloudflare\\.com' cloudflared.log | head -n1 || true)
+            if [ -n "${TUNNEL_URL}" ]; then
+              echo "${TUNNEL_URL}" > tunnel-url.txt
+              echo "Tunnel: ${TUNNEL_URL}"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "::error::Cloudflare tunnel URL was not found"
+          cat cloudflared.log || true
+          exit 1
+
+      - name: Prepare discovery endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pages
+          TUNNEL_URL=$(cat tunnel-url.txt)
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timedelta, timezone
+
+          url = open("tunnel-url.txt", encoding="utf-8").read().strip().rstrip("/")
+          now = datetime.now(timezone.utc)
+          payload = {
+              "service": "TeleMesh",
+              "base_url": url,
+              "ws_url": url.replace("https://", "wss://", 1) + "/api/v1/events",
+              "updated_at": now.isoformat(),
+              "expires_at": (now + timedelta(minutes=350)).isoformat(),
+              "run_id": os.environ.get("GITHUB_RUN_ID"),
+          }
+          with open("pages/endpoint.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, separators=(",", ":"))
+          PY
+          cat > pages/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>TeleMesh Relay</title>
+          <h1>TeleMesh relay discovery</h1>
+          <p>This page publishes the current ephemeral relay endpoint.</p>
+          <p><a href="./endpoint.json">endpoint.json</a></p>
+          HTML
+          touch pages/.nojekyll
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload discovery site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: pages
+
+      - name: Deploy discovery site
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Publish relay information
+        run: |
+          echo "GitHub Pages: ${{ steps.deployment.outputs.page_url }}"
+          echo "TeleMesh API: $(cat tunnel-url.txt)"
+          echo "The client discovers this URL from endpoint.json."
+
+      - name: Keep relay alive
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'kill $(cat cloudflared.pid) 2>/dev/null || true; kill $(cat telemesh-server.pid) 2>/dev/null || true' EXIT
+          wait $(cat telemesh-server.pid)
