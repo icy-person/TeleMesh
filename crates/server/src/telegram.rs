@@ -7,10 +7,8 @@ use grammers_client::{
     Client, SignInError, Update, UpdatesConfiguration,
 };
 use grammers_mtsender::SenderPool;
-use grammers_session::{
-    storages::SqliteSession,
-};
-use tokio::{io::{AsyncSeekExt, AsyncWriteExt}, sync::broadcast, time::sleep};
+use grammers_session::{defs::PeerRef, storages::SqliteSession, Session};
+use tokio::{io::AsyncWriteExt, sync::broadcast, time::sleep};
 use telemesh_protocol::{
     DialogDto, Event, MediaDto, MeResponse, MessageDto, MessagesResponse, SearchResponse,
     SendMessageResponse,
