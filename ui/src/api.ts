@@ -21,7 +21,7 @@ export class TeleMeshApi{
  loginComplete(code:string){return this.req<Me>("/api/v1/auth/complete",{method:"POST",body:JSON.stringify({code})})}
  loginPassword(password:string){return this.req<Me>("/api/v1/auth/password",{method:"POST",body:JSON.stringify({password})})}
  async ticket(){return this.req<{ticket:string}>("/api/v1/events/ticket",{method:"POST"})}
- async events(onEvent:(e:Event)=>void|Promise<void>,onState:(s:boolean)=>void){
+ events(onEvent:(e:Event)=>void|Promise<void>,onState:(s:boolean)=>void){
    let stopped=false,ws:WebSocket|null=null,timer:number|undefined,attempt=0;
    const connect=async()=>{
      if(stopped)return;
@@ -47,7 +47,7 @@ export class TeleMeshApi{
      }
    };
    void connect();
-   return ()=>{stopped=true;if(timer!==undefined)window.clearTimeout(timer);ws?.close();ws=null;onState(false)};
+   return ()=>{stopped=true;if(timer!==undefined)window.clearTimeout(timer);timer=undefined;ws?.close();ws=null;onState(false)};
  }
 }
 export function messageText(m:Message){return m.text||"(media)"}
