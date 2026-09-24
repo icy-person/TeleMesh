@@ -6,6 +6,17 @@ import type {Dialog,Event,Health,Me,Message} from "./types";
 const DEFAULT_SERVER="http://127.0.0.1:8787";
 const DISCOVERY_URL="https://icy-person.github.io/TeleMesh/endpoint.json";
 const initials=(s:string)=>s.trim().split(/\s+/).slice(0,2).map(x=>x[0]).join("").toUpperCase()||"?";
+const LOOPBACK_HOSTS=new Set(["localhost","127.0.0.1","[::1]"]);
+// Validates a server URL received from the discovery endpoint and strips trailing slashes.
+// The client token is sent to this URL, so only https (or plain http on loopback) is accepted.
+const normalizeServerUrl=(raw:string):string=>{
+ let u:URL;
+ try{u=new URL(raw.trim())}catch{throw new Error("Discovery returned an invalid server URL")}
+ if(u.protocol!=="https:"&&u.protocol!=="http:")throw new Error("Discovery returned an unsupported URL protocol");
+ if(u.protocol==="http:"&&!LOOPBACK_HOSTS.has(u.hostname))throw new Error("Discovery returned an insecure (http) server URL");
+ if(u.username||u.password)throw new Error("Discovery URL must not contain credentials");
+ return u.href.replace(/\/+$/,"");
+};
 
 export default function App(){
  const savedServer=localStorage.getItem("tm_server")||"";
@@ -138,8 +149,8 @@ export default function App(){
    let cancelled=false;
    setLoading(true);
    fetch(DISCOVERY_URL+"?t="+Date.now(),{cache:"no-store"})
-     .then(async r=>{if(!r.ok)throw new Error("Discovery HTTP "+r.status);const x=await r.json() as {base_url?:string};if(!x.base_url)throw new Error("Discovery response has no server URL");return x.base_url;})
-     .then(url=>{if(cancelled)return;const normalized=url.replace(/\/$/,"");setServer(normalized);setServerAuto(true);localStorage.setItem("tm_server",normalized);localStorage.setItem("tm_server_auto","1");setSettings(!token);setError("");})
+     .then(async r=>{if(!r.ok)throw new Error("Discovery HTTP "+r.status);const x=await r.json() as {base_url?:string};if(!x.base_url)throw new Error("Discovery response has no server URL");return normalizeServerUrl(x.base_url);})
+     .then(normalized=>{if(cancelled)return;setServer(normalized);setServerAuto(true);localStorage.setItem("tm_server",normalized);localStorage.setItem("tm_server_auto","1");setSettings(!token);setError("");})
      .catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:"Server discovery failed");})
      .finally(()=>{if(!cancelled)setLoading(false);});
    return ()=>{cancelled=true};
