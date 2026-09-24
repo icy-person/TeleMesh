@@ -2,7 +2,7 @@ import type {Dialog,Event,Health,Me,Message} from "./types";
 export class TeleMeshApi{
  constructor(public base:string,public token:string){}
  private async req<T>(path:string,init:RequestInit={}):Promise<T>{
-  const r=await fetch(this.base.replace(/\\/$/,"")+path,{...init,headers:{"content-type":"application/json","x-telemesh-token":this.token,...(init.headers||{})}});
+  const r=await fetch(this.base.replace(/\/$/,"")+path,{...init,headers:{"content-type":"application/json","x-telemesh-token":this.token,...(init.headers||{})}});
   if(!r.ok) throw new Error((await r.text())||r.statusText);
   return r.json();
  }
