@@ -10,6 +10,8 @@ pub struct DialogDto { pub id: i64, pub name: String, pub username: Option<Strin
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageDto { pub id: i32, pub peer_id: i64, pub text: String, pub outgoing: bool, pub date: Option<DateTime<Utc>> }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessagesResponse { pub messages: Vec<MessageDto>, pub has_more: bool }
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendMessageRequest { pub peer: String, pub text: String }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendMessageResponse { pub message_id: i32, pub peer_id: i64 }
