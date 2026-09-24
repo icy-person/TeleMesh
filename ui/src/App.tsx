@@ -28,7 +28,7 @@ export default function App(){
        const msg=e.data as Message;
        setDialogs(ds=>ds.map(d=>d.id===msg.peer_id?{...d,last_message:msg,unread_count:d.id===selectedRef.current?.id?0:d.unread_count+1}:d));
        setSelected(current=>current);
-       setMessages(x=>selectedRef.current?.id===msg.peer_id&&!x.some(y=>y.id===msg.id)?[...x,msg]:x);
+       setMessages(x=>selectedRef.current?.id===msg.peer_id&&!x.some(y=>y.id===msg.id)?[...x,msg]:x);if(selectedRef.current?.id!==msg.peer_id){void sendNotification({title:"TeleMesh",body:msg.text||"New message"}).catch(()=>{})}
      }
    },setConnected);
  }catch(e){setError(e instanceof Error?e.message:"Connection failed");setConnected(false)}finally{setLoading(false)}};
@@ -53,7 +53,7 @@ export default function App(){
  };
 
  const loadHistory=async(d:Dialog)=>{setLoadingMore(false);setLoading(true);try{
-   const peer=d.username||String(d.id); const r=await api.messages(peer,50,0); setMessages(r.messages);setHistoryMore(r.has_more);
+   const peer=d.username||String(d.id); const r=await api.messages(peer,50,0); setMessages(r.messages);setHistoryMore(r.has_more);await api.markRead(d.username||String(d.id));setDialogs(ds=>ds.map(x=>x.id===d.id?{...x,unread_count:0}:x));
    requestAnimationFrame(()=>{if(scrollRef.current)scrollRef.current.scrollTop=scrollRef.current.scrollHeight});
  }catch(e){setError(e instanceof Error?e.message:"History failed")}finally{setLoading(false)}};
 
