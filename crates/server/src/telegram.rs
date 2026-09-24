@@ -47,7 +47,7 @@ impl TelegramService {
     fn message_dto(m: &grammers_client::message::Message) -> MessageDto {
         MessageDto {
             id:m.id(), peer_id:m.peer_id().value(), text:m.text().to_owned(), outgoing:m.outgoing(), date:Some(m.date()),
-            reply_to:m.reply_to_message_id(), edited:m.edit_date().is_some(), reaction_count:m.reaction_count(), media:None,
+            reply_to:m.reply_to_message_id(), edited:m.edit_date().is_some(), reaction_count:m.reaction_count(), media:m.media().map(|_| telemesh_protocol::MediaDto{kind:"media".into(),filename:None,mime:None,size:None}),
         }
     }
 
@@ -120,6 +120,16 @@ impl TelegramService {
         }
         Ok(SearchResponse{messages:out})
     }
+    pub async fn download_media(&self, peer:&str, message_id:i32)->Result<Vec<u8>>{
+        let peer_ref=self.peer_ref(peer).await?;
+        let mut found=self.client.get_messages_by_id(peer_ref,&[message_id]).await?;
+        let message=found.pop().flatten().ok_or_else(||anyhow::anyhow!("message not found"))?;
+        let media=message.media().ok_or_else(||anyhow::anyhow!("message has no media"))?;
+        let mut stream=self.client.iter_download(&media); let mut out=Vec::new();
+        while let Some(chunk)=stream.next().await? { out.extend_from_slice(&chunk); if out.len()>50*1024*1024{return Err(anyhow::anyhow!("media exceeds 50 MiB limit"));} }
+        Ok(out)
+    }
+
     pub async fn send_file(&self, peer:&str, path:&std::path::Path, caption:&str)->Result<SendMessageResponse>{
         let peer_ref=self.peer_ref(peer).await?;
         let uploaded=self.client.upload_file(path).await?;
