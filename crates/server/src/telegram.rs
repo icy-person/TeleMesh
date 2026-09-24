@@ -12,7 +12,7 @@ use telemesh_protocol::{
     DialogDto, Event, MediaDto, MeResponse, MessageDto, MessagesResponse, SearchResponse,
     SendMessageResponse,
 };
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 pub struct LoginState {
     pub token: LoginToken,
