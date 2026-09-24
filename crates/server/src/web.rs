@@ -1,5 +1,5 @@
 use std::{sync::Arc, time::{Duration, Instant}};
-use axum::{extract::{State, WebSocketUpgrade, Query}, http::{HeaderMap, StatusCode}, response::{IntoResponse, Response}, routing::{get, post}, Json, Router};
+use axum::{extract::{State, WebSocketUpgrade, Query, Multipart}, http::{HeaderMap, StatusCode}, response::{IntoResponse, Response}, routing::{get, post}, Json, Router};
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
@@ -16,6 +16,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/dialogs", get(dialogs))
         .route("/api/v1/messages", get(messages))
         .route("/api/v1/messages/send", post(send_message))
+        .route("/api/v1/messages/media", post(send_media))
         .route("/api/v1/messages/edit", post(edit_message))
         .route("/api/v1/messages/delete", post(delete_messages))
         .route("/api/v1/messages/forward", post(forward_messages))
@@ -69,6 +70,23 @@ async fn send_message(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Jso
         Ok(v) => Json(v).into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, Json(ApiError { error: e.to_string() })).into_response(),
     }
+}
+
+async fn send_media(State(s): State<Arc<AppState>>, h: HeaderMap, mut multipart: Multipart) -> Response {
+    if !authorized(&h, &s) { return deny(); }
+    let mut peer=String::new(); let mut caption=String::new(); let mut name="upload.bin".to_string(); let mut bytes:Vec<u8>=Vec::new();
+    while let Ok(Some(field))=multipart.next_field().await {
+        let field_name=field.name().unwrap_or_default().to_string();
+        if field_name=="peer" { peer=field.text().await.unwrap_or_default(); }
+        else if field_name=="caption" { caption=field.text().await.unwrap_or_default(); }
+        else if field_name=="file" { if let Some(n)=field.file_name(){name=n.to_string()} bytes=field.bytes().await.unwrap_or_default().to_vec(); }
+    }
+    if peer.trim().is_empty() || bytes.is_empty() { return (StatusCode::BAD_REQUEST, Json(ApiError{error:"peer and file are required".into()})).into_response(); }
+    if bytes.len()>50*1024*1024 { return (StatusCode::PAYLOAD_TOO_LARGE, Json(ApiError{error:"file too large (50 MiB limit)".into()})).into_response(); }
+    let safe_name=name.replace('/','_').replace('\\','_'); let path=std::env::temp_dir().join(format!("telemesh-{}-{}",Uuid::new_v4(),safe_name));
+    if let Err(e)=tokio::fs::write(&path,&bytes).await { return (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiError{error:e.to_string()})).into_response(); }
+    let result=s.telegram.send_file(&peer,&path,&caption).await; let _=tokio::fs::remove_file(&path).await;
+    match result { Ok(v)=>Json(v).into_response(), Err(e)=>(StatusCode::BAD_GATEWAY,Json(ApiError{error:e.to_string()})).into_response() }
 }
 
 async fn edit_message(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Json<EditMessageRequest>) -> Response {
