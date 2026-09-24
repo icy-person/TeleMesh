@@ -27,7 +27,7 @@ export default function App(){
      if(e.type==="NewMessage"&&e.data){
        const msg=e.data as Message;
        setDialogs(ds=>ds.map(d=>d.id===msg.peer_id?{...d,last_message:msg,unread_count:d.id===selectedRef.current?.id?0:d.unread_count+1}:d));
-       setMessages(x=>selectedRef.current?.id===msg.peer_id&&!x.some(y=>y.id===msg.id)?[...x,msg]:x);if(selectedRef.current?.id!==msg.peer_id){void sendNotification({title:"TeleMesh",body:msg.text||"New message"}).catch(()=>{})}
+       setMessages(x=>selectedRef.current?.id===msg.peer_id&&!x.some(y=>y.id===msg.id)?[...x,msg]:x);if(selectedRef.current?.id!==msg.peer_id){try{sendNotification({title:"TeleMesh",body:msg.text||"New message"})}catch{}}
      }
    },setConnected);
  }catch(e){setError(e instanceof Error?e.message:"Connection failed");setConnected(false)}finally{setLoading(false)}};
