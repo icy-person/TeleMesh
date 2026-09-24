@@ -99,7 +99,12 @@ The UI currently provides:
 - chat list and local chat filtering
 - real Telegram message history
 - older-message pagination
-- message sending
+- message sending and replies
+- edit/delete/forward/reactions
+- message and global chat search
+- read state and unread badges
+- media upload
+- native Linux notifications
 - realtime new-message events
 - responsive desktop/mobile layout
 
