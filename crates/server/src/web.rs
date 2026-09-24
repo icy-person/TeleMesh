@@ -333,7 +333,7 @@ async fn auth_complete(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Js
     match s.telegram.login_code(&x.token, &r.code).await {
         Ok(u) => {
             *l = None;
-            Json(MeResponse { id: u.raw.id().bare_id(), username: u.username().map(str::to_owned), first_name: u.first_name().map(str::to_owned), last_name: u.last_name().map(str::to_owned) }).into_response()
+            Json(MeResponse { id: u.raw.id(), username: u.username().map(str::to_owned), first_name: u.first_name().map(str::to_owned), last_name: u.last_name().map(str::to_owned) }).into_response()
         }
         Err(grammers_client::SignInError::PasswordRequired(p)) => {
             x.password = Some(p);
