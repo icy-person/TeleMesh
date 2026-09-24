@@ -92,7 +92,7 @@ async fn send_media(State(s): State<Arc<AppState>>, h: HeaderMap, mut multipart:
 async fn edit_message(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Json<EditMessageRequest>) -> Response {
     if !authorized(&h, &s) { return deny(); }
     match s.telegram.edit_message(&r.peer, r.message_id, &r.text).await {
-        Ok(()) => Json(serde_json::json!({"ok":true})).into_response(),
+        Ok(()) => { let _=s.events.send(Event::Status{authorized:true}); Json(serde_json::json!({"ok":true})).into_response() },
         Err(e) => (StatusCode::BAD_GATEWAY, Json(ApiError { error: e.to_string() })).into_response(),
     }
 }
