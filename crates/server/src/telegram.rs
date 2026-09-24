@@ -193,7 +193,6 @@ impl TelegramService {
 
         self.session
             .peer(peer_id)
-            ?
             .map(PeerRef::from)
             .ok_or_else(|| anyhow!("peer reference is not cached"))
     }
