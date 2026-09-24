@@ -14,20 +14,54 @@ export default function App(){
  const [query,setQuery]=useState(""),[draft,setDraft]=useState(""),[error,setError]=useState(""),[loading,setLoading]=useState(false),[settings,setSettings]=useState(!token);
  const [historyMore,setHistoryMore]=useState(false),[loadingMore,setLoadingMore]=useState(false),[reply,setReply]=useState<Message|null>(null),[editing,setEditing]=useState<Message|null>(null),[search,setSearch]=useState(""),[searchResults,setSearchResults]=useState<Message[]>([]),[file,setFile]=useState<File|null>(null);
  const [phone,setPhone]=useState(""),[code,setCode]=useState(""),[password,setPassword]=useState(""),[loginStep,setLoginStep]=useState<"phone"|"code"|"password">("phone"),[loginBusy,setLoginBusy]=useState(false);
- const api=useMemo(()=>new TeleMeshApi(server,token),[server,token]); const stop=useRef<(()=>void)|null>(null); const scrollRef=useRef<HTMLDivElement|null>(null); const selectedRef=useRef<Dialog|null>(null);
+ const api=useMemo(()=>new TeleMeshApi(server,token),[server,token]); const stop=useRef<(()=>void)|null>(null); const scrollRef=useRef<HTMLDivElement|null>(null); const selectedRef=useRef<Dialog|null>(null); const syncingRef=useRef(false);
 
  const chooseDialog=(d:Dialog|null)=>{selectedRef.current=d;setSelected(d)};
+ const resync=async(d:Dialog|null=selectedRef.current)=>{
+   if(syncingRef.current)return;
+   syncingRef.current=true;
+   try{
+     const fresh=await api.dialogs();
+     setDialogs(fresh);
+     const current=d?fresh.find(x=>x.id===d.id):fresh.find(x=>x.id===selectedRef.current?.id);
+     if(current){
+       selectedRef.current=current; setSelected(current);
+       const r=await api.messages(current.username||String(current.id),50,0);
+       setMessages(r.messages); setHistoryMore(r.has_more);
+       await api.markRead(current.username||String(current.id));
+       setDialogs(ds=>ds.map(x=>x.id===current.id?{...x,unread_count:0}:x));
+     }
+   }catch(e){setError(e instanceof Error?e.message:"State resync failed")}
+   finally{syncingRef.current=false}
+ };
+
  const connect=async()=>{setError("");setLoading(true);try{
    localStorage.setItem("tm_server",server);localStorage.setItem("tm_token",token);
    const h=await api.health(); setHealth(h);
    if(!h.telegram_authorized){setConnected(false);setSettings(false);return}
    const [m,d]=await Promise.all([api.me(),api.dialogs()]);
    setMe(m);setDialogs(d);chooseDialog(d[0]||null);setSettings(false);
-   stop.current?.(); stop.current=await api.events((e:Event)=>{
+   stop.current?.(); stop.current=await api.events(async(e:Event)=>{
      if(e.type==="NewMessage"&&e.data){
        const msg=e.data as Message;
        setDialogs(ds=>ds.map(d=>d.id===msg.peer_id?{...d,last_message:msg,unread_count:d.id===selectedRef.current?.id?0:d.unread_count+1}:d));
-       setMessages(x=>selectedRef.current?.id===msg.peer_id&&!x.some(y=>y.id===msg.id)?[...x,msg]:x);if(selectedRef.current?.id!==msg.peer_id){try{sendNotification({title:"TeleMesh",body:msg.text||"New message"})}catch{}}
+       setMessages(x=>selectedRef.current?.id===msg.peer_id&&!x.some(y=>y.id===msg.id)?[...x,msg]:x);
+       if(selectedRef.current?.id!==msg.peer_id){try{sendNotification({title:"TeleMesh",body:msg.text||"New message"})}catch{}}
+     }else if(e.type==="MessageEdited"&&e.data){
+       const msg=e.data as Message;
+       setMessages(x=>x.map(m=>m.id===msg.id?msg:m));
+       setDialogs(ds=>ds.map(d=>d.id===msg.peer_id?{...d,last_message:d.last_message?.id===msg.id?msg:d.last_message}:d));
+     }else if(e.type==="MessagesDeleted"&&e.data){
+       const x=e.data as {peer_id:number;message_ids:number[]};
+       setMessages(ms=>ms.filter(m=>m.peer_id!==x.peer_id||!x.message_ids.includes(m.id)));
+     }else if(e.type==="ReactionUpdated"&&e.data){
+       const x=e.data as {peer_id:number;message_id:number};
+       if(selectedRef.current?.id===x.peer_id) await resync(selectedRef.current);
+     }else if(e.type==="Status"&&e.data){
+       const x=e.data as {authorized:boolean};
+       if(x.authorized) await resync();
+     }else if(e.type==="Reconnecting"){
+       setConnected(false);
      }
    },setConnected);
  }catch(e){setError(e instanceof Error?e.message:"Connection failed");setConnected(false)}finally{setLoading(false)}};
