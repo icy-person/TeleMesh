@@ -352,7 +352,7 @@ async fn auth_password(State(s): State<Arc<AppState>>, h: HeaderMap, Json(r): Js
     match s.telegram.login_password(p, &r.password).await {
         Ok(u) => {
             *l = None;
-            Json(MeResponse { id: u.raw.id().bare_id(), username: u.username().map(str::to_owned), first_name: u.first_name().map(str::to_owned), last_name: u.last_name().map(str::to_owned) }).into_response()
+            Json(MeResponse { id: u.raw.id(), username: u.username().map(str::to_owned), first_name: u.first_name().map(str::to_owned), last_name: u.last_name().map(str::to_owned) }).into_response()
         }
         Err(e) => (StatusCode::UNAUTHORIZED, Json(ApiError { error: e.to_string() })).into_response(),
     }
