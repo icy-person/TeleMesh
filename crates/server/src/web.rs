@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::{Duration, Instant}};
+use std::{collections::HashMap, sync::Arc, time::{Duration, Instant}};
 
 use axum::{
     body::Body,
@@ -32,6 +32,10 @@ fn max_media_bytes() -> u64 {
         .filter(|v| *v > 0)
         .map(|mb| mb.saturating_mul(1024 * 1024))
         .unwrap_or(DEFAULT_MAX_MEDIA_BYTES)
+}
+
+fn prune_expired_tickets(tickets: &mut HashMap<String, Instant>, now: Instant) {
+    tickets.retain(|_, expiry| *expiry > now);
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -72,8 +76,13 @@ fn deny() -> Response {
 
 async fn ticket(State(s): State<Arc<AppState>>, h: HeaderMap) -> Response {
     if !authorized(&h, &s) { return deny(); }
+
+    let now = Instant::now();
+    let mut tickets = s.ws_tickets.lock().await;
+    prune_expired_tickets(&mut tickets, now);
+
     let t = Uuid::new_v4().to_string();
-    s.ws_tickets.lock().await.insert(t.clone(), Instant::now() + Duration::from_secs(60));
+    tickets.insert(t.clone(), now + Duration::from_secs(60));
     Json(serde_json::json!({"ticket": t})).into_response()
 }
 
@@ -391,5 +400,39 @@ async fn websocket(mut socket: WebSocket, mut rx: tokio::sync::broadcast::Receiv
                 Some(Err(_)) => break,
             }
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::prune_expired_tickets;
+    use std::{
+        collections::HashMap,
+        time::{Duration, Instant},
+    };
+
+    #[test]
+    fn removes_expired_tickets_and_keeps_live_tickets() {
+        let now = Instant::now();
+        let mut tickets = HashMap::from([
+            ("expired".to_string(), now - Duration::from_secs(1)),
+            ("expires_now".to_string(), now),
+            ("live".to_string(), now + Duration::from_secs(1)),
+        ]);
+
+        prune_expired_tickets(&mut tickets, now);
+
+        assert_eq!(tickets.len(), 1);
+        assert!(tickets.contains_key("live"));
+    }
+
+    #[test]
+    fn pruning_an_empty_ticket_store_is_safe() {
+        let mut tickets = HashMap::new();
+
+        prune_expired_tickets(&mut tickets, Instant::now());
+
+        assert!(tickets.is_empty());
     }
 }
